@@ -1,0 +1,280 @@
+Recommendations to a Government Manager on the Preparation for Severe Weather Events
+====================================================================================
+
+#### *based on Historical Data Exploration from the U.S. National Oceanic and Atmospheric Administration's (NOAA) Storm Database using severe weather data events.*
+
+
+## <u> *Synopsis* </u>
+write up to 10 sentences
+
+## <u> *Data Processing* </u>
+
+```{r libraries,message=F,cache=F}
+library(R.utils)
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(quantmod)
+library(knitr)
+```
+
+```{r general.settings,include=F,cache=F}
+options(digits = 8)
+opts_chunk$set(fig.width=12)
+```
+
+### Downloading, Extracting and Saving the Dataset
+
+The dataset is available at the link [NOAA Storm Database](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) from the Coursera's Reproducible Research course repository. It contains severe weather data events from 1950 to 2011. The comma-separated-value file was compressed via the bzip2 algorithm to reduce its size.
+
+The data file is downloaded, extracted and saved at the working directory using the R code:
+
+```{r download.and.extract.data,cache=T,eval=F}
+download.file("http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile="rawdata.csv.bz2")
+bunzip2("rawdata.csv.bz2", overwrite=T, remove=F)
+```
+
+Then the raw data is loaded in R:
+
+```{r load.data,cache=T}
+rawdata <- read.csv("rawdata.csv")
+```
+
+A data table is created using the function data.table that inherits data.frame. It offers fast subset, fast grouping, fast update, fast ordered joins and list columns in a short and flexible syntax, for faster development. Source: R Documentation on the data.tablepackage {data.table}.
+
+```{r data.table,cache=T}
+rawdata <- data.table(rawdata)
+```
+
+The raw dataset contains 902297 rows with data collected between JAN-1950 and NOV-2011.
+
+```{r rawdata.dim}
+dim(rawdata)
+```
+
+There are few events captured in the earlier years due to a lack of good records. Most recent years should be considered more complete.
+The summarization of events per year is made using the code below:
+
+```{r events.per.year}
+rawdata$year = as.numeric(format(as.Date(rawdata$BGN_DATE, format="%m/%d/%Y %H:%M:%S"), "%Y"))
+RecordsByYear = rawdata[, lapply(.SD,length), by=year, .SDcols=1]
+setnames(RecordsByYear, 2, "count")
+ggplot(RecordsByYear) + geom_line(aes(year, count), colour = 'blue', size = 1)
+```
+
+Based on the plot of the number of events captured per year, we conclude that during the first 4 decades the number of events captured
+is lower in comparison to the last 2 decades. In the mid 1990s we see a spike in the number of events beign captured. In order to avoid
+capturing partial data we decided to use data collected starting in 2001.
+
+A new subset of data is created using the code below:
+
+```{r subset.data}
+data <- rawdata[year >= 2001]
+```
+The new subset of data from JAN-2001 to NOV-2011 contains 488692 rows as the information obtained
+using the code below:
+
+```{r data.dim}
+dim(data)
+```
+
+These recent years represent a little less than 18% of the total data collection period but include over 54% of the total data collected.  
+
+In order to combine property and crop damage, there is a need to standardize their numerical formats. The code below is used for that:
+
+```{r convert.units.property,warning=F}
+data$PROPDMGEXP = as.character(data$PROPDMGEXP)
+data$PROPDMGEXP[toupper(data$PROPDMGEXP) == 'B'] = "9"
+data$PROPDMGEXP[toupper(data$PROPDMGEXP) == 'M'] = "6"
+data$PROPDMGEXP[toupper(data$PROPDMGEXP) == 'K'] = "3"
+data$PROPDMGEXP[toupper(data$PROPDMGEXP) == 'H'] = "2"
+data$PROPDMGEXP = as.numeric(data$PROPDMGEXP)
+data$PROPDMGEXP[is.na(data$PROPDMGEXP)] = 0
+data$PropertyDamage = data$PROPDMG * 10^data$PROPDMGEXP
+```
+```{r convert.units.crops,warning=F}
+data$CROPDMGEXP = as.character(data$CROPDMGEXP)
+data$CROPDMGEXP[toupper(data$CROPDMGEXP) == 'B'] = "9"
+data$CROPDMGEXP[toupper(data$CROPDMGEXP) == 'M'] = "6"
+data$CROPDMGEXP[toupper(data$CROPDMGEXP) == 'K'] = "3"
+data$CROPDMGEXP[toupper(data$CROPDMGEXP) == 'H'] = "2"
+data$CROPDMGEXP[toupper(data$CROPDMGEXP) == ''] = "0"
+data$CROPDMGEXP = as.numeric(data$CROPDMGEXP)
+data$CROPDMGEXP[is.na(data$CROPDMGEXP)] = 0
+data$CropDamage = data$CROPDMG * 10^data$CROPDMGEXP
+```
+The economic impact of weather events is defined as the sum of property damage and crop damage as the code below:
+
+```{r create.totaldamage}
+data$TotalDamage = data$PropertyDamage + data$CropDamage
+```
+
+During the data collection process, given the absence of standardized categories, is very common to capture free text categories that are supposed to be the same but due to abbreviations or spaces added become different categories. We noticed that the variable EVTYPE contains 985 distinct categories as presented by the code below: 
+
+```{r events.dups}
+unique(data$EVTYPE)
+```
+
+In order to clean up these categories we used the codes below to capture the majority of them. We did not attempt to capture 100% of them but the ones that represent most of the damage, and people impacted represented by the number of injuries and fatalities. 
+
+
+```{r tail.group.damage}
+tail(sort(tapply(data$TotalDamage, data$EVTYPE, sum)), n=50)
+```
+
+
+```{r merge.evtype.1}
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("TSTM WIND",
+" TSTM WIND",
+"SEVERE THUNDERSTORM WINDS",
+"THUNDERSTORM WINDS")] = "THUNDERSTORM WIND"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("HURRICANE/TYPHOON",
+"HURRICANE OPAL",
+"HURRICANE OPAL/HIGH WINDS",
+"HURRICANE EMILY",
+"TYPHOON",
+"HURRICANE ERIN")] = "HURRICANE"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("WILD/FOREST FIRE",
+"WILDFIRES",
+"WILD FIRES")] = "WILDFIRE"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("HEAVY RAIN/SEVERE WEATHER",
+"EXCESSIVE RAINFALL",
+"UNSEASONAL RAIN",
+"HEAVY RAINS")] = "HEAVY RAIN"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("HIGH WINDS",
+"HIGH WIND",
+"BLOWING WIND",
+"STRONG WINDS",
+"STRONG WIND")] = "WIND"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("STORM SURGE/TIDE"
+)] = "STORM SURGE"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("EXCESSIVE HEAT",
+"HEAT WAVE",
+"EXTREME HEAT",
+"UNSEASONABLY WARM",
+"RECORD/EXCESSIVE HEAT",
+"RECORD HEAT")] = "HEAT"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("EXTREME COLD",
+"FROST/FREEZE",
+"FROST",
+"Early Frost ",
+"DAMAGING FREEZE",
+"RECORD COLD",
+"COLD/WIND CHILL",
+"EXTREME COLD/WIND CHILL",
+"UNSEASONABLY COLD",
+"Unseasonable Cold",
+"HARD FREEZE",
+"FREEZE")] = "COLD"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("COASTAL FLOODING",
+"COASTAL FLOODING/EROSION",
+"COASTAL FLOODING/EROSION",
+"Erosion/Cstl Flood",
+"COASTAL FLOOD")] = "COASTAL FLOOD"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("FLASH FLOODING",
+"FLASH FLOOD/FLOOD",
+"FLOOD/FLASH FLOOD")] = "FLASH FLOOD"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("SMALL HAIL")] = "HAIL"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("RIVER FLOODING"
+)] = "RIVER FLOOD"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("FLOODING",
+"MAJOR FLOOD")] = "FLOOD"
+```
+
+
+```{r tail.group.people}
+data$TotalPeople = data$INJURIES + data$FATALITIES
+tail(sort(tapply(data$TotalPeople, data$EVTYPE, sum)), n=20)
+```
+```{r merge.evtype.2}
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("TROPICAL STORM GORDON",
+"TROPICAL STORM JERRY")] = "TROPICAL STORM"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("DENSE FOG"
+)] = "FOG"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("WINTER STORMS"
+)] = "WINTER STORM"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("WATERSPOUT/TORNADO"
+)] = "WATERSPOUT"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("MARINE TSTM WIND"
+)] = "MARINE THUNDERSTORM WIND"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("RIP CURRENTS"
+)] = "RIP CURRENT"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("HEAVY SURF",
+"HEAVY SURF/HIGH SURF")] = "HIGH SURF"
+data$EVTYPE[toupper(data$EVTYPE) %in%
+c("WINTRY MIX",
+"WINTER WEATHER MIX",
+"WINTER WEATHER/MIX")] = "WINTER WEATHER"
+```
+
+## <u> *Results* </u>
+
+Due to the seasonality of some events we decided to aggregate the data by events and did not use the annual data.
+
+The events were grouped according to:
+
+### *A) Population Health Impact (Number of People Affected)*
+
+For the 10 event types with most people affected we have the code below:
+
+```{r plot.event.types.people.affected}
+people = as.data.frame.table(tail(sort(tapply(data$TotalPeople, data$EVTYPE, sum)), n=10))
+colnames(people) = c("EventType", "TotalPeople")
+p1 = ggplot(data=people, aes(x=EventType, y=TotalPeople)) +
+theme(plot.margin=unit(c(1,1,-0.2,.90), "cm")) +
+geom_bar(stat="identity") +
+labs(x="", y="# People Killed/Injured")
+p2 = p1 + scale_y_log10() +
+theme(plot.margin=unit(c(-0.2,1,1,1), "cm")) +
+theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+labs(y=expression(paste("(", log[10], ")"))) +
+xlab("Type of Severe Weather Event")
+p1 = p1 + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+grid.arrange(p1, p2, nrow=2, main="Most People Impacted Event Types")
+```
+
+
+### *B) Economic Impact (Cost of Damages)*
+
+For the 10 event types per their economic impact we have the code below:
+
+```{r plot.costly.event.types}
+destruction = as.data.frame.table(tail(sort(tapply(data$TotalDamage, data$EVTYPE, sum)), n=10))
+colnames(destruction) = c("EventType", "TotalDamage")
+p1 = ggplot(data=destruction, aes(x=EventType, y=TotalDamage)) +
+theme(plot.margin=unit(c(1,1,-0.2,.82), "cm")) +
+geom_bar(stat="identity") +
+labs(x="", y="Total Damage (USD)")
+p2 = p1 + scale_y_log10() +
+theme(plot.margin=unit(c(-0.2,1,1,1), "cm")) +
+theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+labs(y=expression(paste("(", log[10], "USD)"))) +
+xlab("Type of Severe Weather Event")
+p1 = p1 + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+grid.arrange(p1, p2, nrow=2, main="Most Economic Impact Event Types")
+```
+
+We hope that the information above would be useful to the government managers in order to plan in advance having in mind the minimization of both people and economic impact of the severe weather related events.
+
+END.
