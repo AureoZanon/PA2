@@ -9,6 +9,6 @@ The link that was published a couple of hours after the deadline is:
 
 http://rpubs.com/aureozanon/27016
 
-Thanks in advance for taking this link in consideration during the evaluation phase.
+Thanks in advance for takign this in consideration.
 
 
