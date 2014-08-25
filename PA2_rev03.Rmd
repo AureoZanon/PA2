@@ -5,7 +5,18 @@ Recommendations to a Government Manager on the Preparation for Severe Weather Ev
 
 
 ## <u> *Synopsis* </u>
-write up to 10 sentences
+
+The impact of severe weather events in terms of public health: fatalities and injured people,
+and the economic impact caused by their damages: crops and properties, needs to receive attention
+from government authorities. This exploratory data analysis based on historical data from the U.S. 
+National Oceanic and Atmospheric Administration's (NOAA) Storm Database using severe weather data events, 
+provides estimates of fatalities, injuries, and property and crop damage in the United States from 
+JAN-1950 to NOV-2011. The results of this analysis provides some light on how resources should be
+allocated in order to minimize the severe weather events impact by addressing 2 key questions:
+(1) Which types of events are most harmful with respect to population health? 
+(2) Which types of events have the greatest economic consequences?
+
+
 
 ## <u> *Data Processing* </u>
 
@@ -44,7 +55,7 @@ rawdata <- read.csv("rawdata.csv")
 A data table is created using the function data.table that inherits data.frame. It offers fast subset, fast grouping, fast update, fast ordered joins and list columns in a short and flexible syntax, for faster development. Source: R Documentation on the data.tablepackage {data.table}.
 
 ```{r data.table,cache=T}
-rawdata <- data.table(rawdata)
+rawdata = data.table(rawdata)
 ```
 
 The raw dataset contains 902297 rows with data collected between JAN-1950 and NOV-2011.
@@ -277,4 +288,4 @@ grid.arrange(p1, p2, nrow=2, main="Most Economic Impact Event Types")
 
 We hope that the information above would be useful to the government managers in order to plan in advance having in mind the minimization of both people and economic impact of the severe weather related events.
 
-END.
+END OF REPORT.
